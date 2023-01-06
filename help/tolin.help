@@ -1,0 +1,1618 @@
+         ,-----.      ______      _ 
+   /\j__/\  (  \`--.    ||   ___  ||       |\   ||
+   \`@_@'/  _)  >--.`.  ||  /   \ ||    /  ||\  ||
+  _{.:Y:_}_{{_,'    ) ) ||  |   | ||    |  || \ ||
+ {_}`-^{_} ```     (_/  ||  \___/ \|___ |  ||  \||  Versión Alfa.
+
+
+Modo de uso:
+   tolin [-cdBFM][-man][-ts "sep"][-seed][-ss|sw|si|nss|nsw "patron"][-rad][-buf n]
+         [-fs|fw|nfs|nfw PATRON-file] 
+         -f [path]file-input | foo 
+         <-t [path]filemacro | 'script-macro'> [> file][| commando]
+
+   -man            manual de funciones y operadores de macros Tolin.
+   -h              ayuda compacta.
+
+---/   
+  Las siguientes opciones definen los parámetros para la herramienta GREP de uso interno:
+  
+   -ss "string"    busca un string en cada línea procesada: si lo encuentra, la línea se procesa; sino, la
+                   línea se omite. El string puede ser un substring. Si "string" es "COM", serán matches
+                   "LOCOMOCION","COMO" y "COMODO". 
+                   La búsqueda es case sensitive, o sea, distingue entre mayúsculas y minúsculas...
+                   ¿Sabes cuál es la versión mayúscula del número 5? Resp: V.
+
+  >>OBSERVACION>>  Debe considerar que GREP requiere del caracter de escape '\' para ciertos caracteres
+                   especiales.
+                   Ejemplo:
+                     tolin -f xu.prg -ss "\#include" '#'
+                   buscará todas las líneas que comiencen con '#', y las mostrará. Si usted escribe:
+                     tolin -f xu.prg -ss "#include" '#'
+                   sin el caracter de escape antes de '#include', GREP arrojará un error.
+                   Esta observación es válida para todas las opciones relacionadas con GREP dentro de
+                   este apartado. 
+                   
+   -sw "string"    idem a '-ss', pero el string debe ser exacto. Si "string" es "COM", no serán matches
+                   "LOCOMOCION","COMO" ni "COMODO".
+                   La búsqueda es case sensitive.
+   -nss "string"   Omite todas las líneas donde se encuentre contenido el string indicado.
+   -nsw "string"   Omite todas las líneas donde esté exactamente el string indicado.
+   -fs PATRON-file especifica una búsqueda usando patrones extraídos desde PATRON-file. Si alguno de esos
+                   patrones existe, la línea se procesa.
+   -fw PATRON-file idem al anterior, con la diferencia de que busca palabras completas.
+   -nfs PATRON-file omite las líneas donde se encuentren todos los patrones indicados en PATRON-file.
+   -nfw PATRON-file omite las líneas donde se encuentren todas las palabras completas indicadas en 
+                    PATRON-file.
+   -E              si usa como PATRON una expresión regular, indica que debe usar expresiones regulares
+                   extendidas. Por default se utiliza expresión regular básica.
+                   Desactivará '-G' si está presente.
+   -G              (experimental) PATRON es una expresión regular Perl. Desactivará '-E' si está presente.
+   -si             define que las búsquedas realizadas sean case insensitive. Esta opción influye sobre
+                   los siguientes opciones de búsqueda:
+                    
+                     -ss, -sw, -fs, -fw, -nss, -nsw, -nfs, -nfw.
+---/
+
+   -buf n          define la longitud del buffer de lectura de línea máximo. Por default es 128 caracteres.
+                   El mínimo es 100.
+                   Tenga presente que si dicha longitud es menor a la máxima lógitud presente en el archivo,
+                   el proceso podría fallar (encontrar resultados imprecisos).
+   -B v
+   -B 'v0 v1..'    añade valores al BUFFER, que puede ser usado por LET y LIN.                             
+                   Usar el BUFFER para guardar valores es como usar variables globales. Uselas.
+   
+   -mem n          ajusta el número de variables '@n' usadas en el script. Si "n" es 30, podrá usar variables
+                   desde '@1, @2, ..., @29, @30'.
+                   Ejemplo:
+                     tolin -f foo -mem 10 '@1(10) say(@1+1000000000000000)'
+                   sale:
+                     1000000000000010
+
+   -dim n          dimensiona el BUFFER, el que puede ser usado como un array.
+                   Ejemplo:
+                     tolin -f foo -dim 10 'BUFF @1(1) do let(@1,@1) @1(@1+1) until(@1>10)'
+                   sale:
+                     1 2 3 4 5 6 7 8 9 10
+
+   -f              indica el archivo a procesar. Puede añadir una ruta.
+   -f foo          Puede usar este archivo ficticio para procesar comandos sin la presencia de datos de un
+                   archivo. Normalmente se usa para efectuar cálculos complejos.
+                   Ejemplo: 
+                    tolin -f foo '[inv(200)+0.5*sin(30)]'
+                    
+   -M              procesa un lote de archivos, indicados con comodines. 
+                   Ejemplo: 
+                     tolin -M *.txt 'script...'
+   
+   -s "script"     entrega un string para procesar. Se puede usar con finalidad de prueba.
+                   Ejemplo:
+                     tolin -s "este es un CODIGO" '@1(match{"CODIGO"}?1:0;) @1'
+                   devolverá "1".
+                   En SAT() podrá ver otro ejemplo de esta opción.
+
+   -c 'comando'    ejecuta un comando del sistema operativo, y procesa el resultado.
+                   Ejemplo:
+                     El siguiente comando imprime el total de bytes del directorio actual:
+                       tolin -c 'ls -l' -B 0 'buff let(1,(#1+$5))' ==> 210290615
+                     
+                     El siguiente comando hace lo mismo, pero incluye su valor en KB:
+                       tolin -c 'ls -l' -B '0 0' 'buff let(1,(#1+$5)) let(2,str(#1/1024)+" Kb")'
+                       ==> 210291127 205362.43 Kb
+                     
+                     Idem, pero usando CAT en vez de concatenación "+":
+                       tolin -c 'ls -l' -B '0 0' 'buff let(1,(#1+$5)) let(2,{(#1/1024)," Kb"})'
+                       ==> 210291127 205362.43 Kb
+                     con CAT '{}' no hace falta convertir la operación a string 'str(n)'.
+                     
+                     El siguiente, usa la codificación del sistema para procesar un archivo con caracteres
+                     binarios:
+                       tolin -c 'cat nuevo.txt' '#'
+                     Hace lo mismo que:
+                       tolin -f nuevo.txt -b 'ansi(#)'
+                     
+   -t              indica un archivo de macros, alternativo a 'script'.
+
+   -d n            define una precisión decimal para todos los cálculos de Tolin. Por default, es 2. Se acepta
+                   un valor entre 0 y 15, aunque la máquina de la actual arquitectura solo garantiza hasta 12 o
+                   13 decimales correctos, con cuea.
+                   Ejemplos:
+                     tolin -f foo '10/2345'        ==> 0.00
+                     tolin -f foo -d 4 '10/2345'   ==> 0.0043
+                     tolin -f foo -d 7 '10/2345'   ==> 0.0042644
+                     tolin -f foo -d 13 '10/2345'  ==> 0.0042643923241
+
+   -ts "sep"       define un separador global de tokens. Será usado por las funciones de token de Tolin.
+                   Su valor será alterado por DEFT().
+                   El separador por default es ASCII 32 (espacio en blanco).
+
+   -seed n         define una semilla para el generador de números aleatorios de Tolin.
+   
+   -rad            obliga a las funciones trigonométricas aceptar argumentos en radianes.
+                     
+ [-] 'script'      script de comandos que procesarán el archivo.
+                   Use el guión '-' antes de 'script' si este viene a continuación del parámetro '-M'.
+                   Ejemplo:
+                    tolin -M *.txt - 'VOID at{"base"}?#;' -rad  /* '-' necesario */
+                    tolin -M *.txt -rad 'VOID at{"base"}?#;'    /* '-' no necesario */
+                   
+      strings      Los strings en Tolin son encerrados entre comillas (", o ASCII 34 - ch(34)).
+                   Ejemplo:
+                     "hola mundo!"      ==>  válido  = hola mundo!
+                     'hola mundo!'      ==>  no es válido.
+
+      números      Tolin no se ciñe al tratamiento numérico de Harbour, por lo que puede operar con números
+                   mayores a dicho límite, pero en formato de notación científica.
+                   Un número en notación científica válido es el siguiente:
+                     n.mE|e[-+]exp
+                   Ejemplo:
+                      1E10                   no es válido: falta punto decimal.
+                      1.0e10                 es válido.
+                      4.56E-16               es válido.
+                      1.2E190/1.0e126+11.45  es una operación válida.
+                      tolin -f foo '1.20892e-8+10000'             ==> 10000.00  válido.
+                      tolin -f foo 'round((1.20892e-8+10000),15)' ==> 10000.000000012090000  válido.
+                         
+      código '\'   Caracter de escape usado dentro del script. 
+                   \" : se usa para que Tolin pueda reconocer comillas. 
+
+                   Ejemplo:
+                     tolin -f foo '"\"hola mundo\""' ==>  válido  = "hola mundo!"
+                   
+                   EXCEPCIONES: el comando CLEAR, en Tolin, limpia el BUFFER. Además, los comandos SAVE y LOAD
+                   no tienen uso con Tolin, y el comando FILE, que devuelve el nombre del archivo procesado,
+                   no existe en Laica.
+
+  OBSERVACIONES.
+
+           * La salida del proceso será la consola, o un archivo, si redirige la salida con '>' o '|',
+           * Aparte, puede obtener una salida alternativa usando el BUFFER de Tolin. La función
+             COPY copia datos al BUFFER.
+           * El BUFFER es guardado al finalizar el proceso, en un archivo que tiene como nombre la
+             fecha y la hora actual, más '.buffer'. Por ejemplo, si usted usó el BUFFER para guardar
+             datos, el archivo de salida del BUFFER será:
+                     20191201_130435.buffer
+             Si usa la opción RESET, el BUFFER será guardado de manera diferente (ver RESET más adelante).
+           * La opción '-f' es INCOMPATIBLE con '-M'.
+           * La opción '-c' es INCOMPATIBLE con '-fM'.
+           * La opción '-s' es INCOMPATIBLE con las dos anteriores.
+           * Las opciones '-nss|-nsw' son INCOMPATIBLES con '-ss|-sw'.
+           * Tolin no admite pipeline como datos de entrada. Debe usar '-fM', o '-c'.
+           * Por defecto, Tolin lee archivos UTF8 y US-ASCII, y no hace conversión de codepage.
+             Sin embargo, hace un esfuerzo. Intente probar "UTF8()" y "ANSI()" en su salida.
+
+  EJEMPLOS.
+        1) Si un archivo 'nuevo.txt' contiene un caracter anómalo (e.g. #1), el comando:
+
+                     tolin -f nuevo.txt 'VOID at{ch(1)}?#:tr{ch(1),""};'
+
+           podrá procesarlo, reemplazando ASCII 1 por nada.
+           El comando VOID indica que deben incluirse las líneas en blanco en el proceso.
+           La función TR reemplaza todo lo que encuentre en la línea.
+           La función AT devuelve la posición del primer match, sin importar si es una palabra completa
+           o es parte de otra. La función AF busca el match exacto y completo.
+
+        2) replicará el archivo "prog.c" en la salida estándar:
+
+                     tolin -f prog.c 'VOID #'
+
+        3) Suponga un programa Harbour donde se haya escrito en duro el caracter flecha (#16), en
+           muchas líneas. Para reparar eso, puede usar la siguiente línea:
+
+                     tolin -f clrsel.prg 'VOID at{ch(16)}?#:tr{("\""+ch(16)+"\""),"chr(16)"};'
+             o bien:
+                     tolin -f clrsel.prg 'VOID tr{("\""+ch(16)+"\""),"chr(16)"}'
+
+           Aparte de eliminar los #13 sobrantes (propio de codificación US-ASCII), busca el caracter
+           anómalo (AT); si no lo encuentra, libera la línea completa. Pero, si lo encuentra, reemplaza
+           el caracter "->", por "chr(16)", la función.
+
+        5) Para procesar un grupo de archivos. La salida será única, así como los datos almacenados en
+           el BUFFER con COPY, si no usa RESET:
+
+                     tolin -M datos/*.csv 'VOID match{"CTAAGH"}?{I,{"  :  ",#}};'
+
+           Buscará exactamente 'CTAAGH'; si lo encuentra, despliega la línea con el número de línea.
+           Si no lo encuentra, no hace nada (eso quiere decir que no se use ':' en '?').
+        
+        6) Usando un archivo ficticio "foo", se ejecuta una iteración que llena el BUFFER con la glosa
+           de cada cifra de 100 cifras:
+           
+                     tolin -f foo '@1(0)@2(0) do @2(gloss(@1)) copy(@2) @1(@1+1) until(101-@1)'
+           
+           Su salida será un archivo ".buffer" con lo siguiente:
+                            cero
+                            uno
+                            ...
+                            noventa y nueve
+                            cien
+
+********************************
+UN POCO DE HISTORIA...
+
+  El Tolin es el gato más "choro" que he conocido. Se pasa por el orto relamido a todos los perros de la población, y es el padre de la Mona, la que se encarga de hacer la evaluación del script, así como lo hace con la Laica.
+  Ese gato era tan choro, y debió tener tales historias, las cuales, jamás conoceré. Yo acostumbraba sobarle el lomo hasta que le sacaba estática por las orejas, y eso le encantaba, terminaba ronroneando y babeándome las piernas.
+  La Perla, una gatita madre de muchos (fue, en efecto, una gata "putaza"), por su caracter meticuloso a la hora de escojer a sus parejas de abril, agosto y diciembre, es la que hace el análisis sintáctico, dado que el Bobby está muy viejito y a ese lo dejamos con la Laica, porque, además de viejo, es calentón y medio racista: costó convencerlo de trabajar con la Mona, pero lo hace porque aún cree que se la puede con la Laica, una pastora alemán que se las trae. Y por estar cerca de ella...
+  La Perla comparte su trabajo con el Meketrefe, o el "Meke", un gato romano que tiene sida gatuno pero eso no le impide ser genial. Claro que por su enfermedad no le dimos todo el trabajo, pero como es medio autista, le encargamos efectuar la revisión de los parámetros de entrada. El "Meke", o "Mekeleado" como le decimos con cariño (suma binaria entre "Meke" y "Gato culiado"), es un gato a quien le tengo un afecto especial, y a veces, cuando me acuerdo de él, siento como que se me aprieta un testículo.
+  El Cholito, o Cholo, un gato más negro que mi conciencia, al ser bueno para convertir todo lo que come en caca, fue asignado por Tolin para convertir el script en sus componentes pre-binarios, lo que luego la Perla convertirá a una forma binaria que, más tarde, la Mona se encargará de evaluar.
+  Ese gato convertía todo en caca. Un día, no recuerdo cuando porque está pintado en sepia en mi memoria, yo estaba enfermo en cama y desde ahí vi al Cholito subirse al mesón de la cocina, quedarse ahí un buen rato, y luego, largarse. Más tarde supe que se zampó medio kilo de carne molida. Mi madre se indignó, pero se controló y lo llamó con cariño a su regazo, y el Cholito se acercó ronroneando, tratando de mantener el equilibrio porque la guata bailaba de un lado para otro. Cuento corto, le sacaron la mierda, pero no muy fuerte, porque mi vieja tuvo aprehensiones con esa enorme guata. En suma, al Cholito nadie le quitó lo comido y lo convertido.
+  
+********************************
+
+   ¿Qué hace Tolin, exactamente?
+            Iterará cada línea indicada del archivo o los archivos, y será usada como argumento
+            de la expresión del script.
+            Si cae en un loop infinito, puede abortar con ALT-C (en Linux).
+   
+   Importante
+            Un resultado válido será extraído de la pila de operaciones. Si la pila
+            está vacía, no devolverá nada, pero si tiene más de un elemento, Tolin
+            arrojará error. Un ejemplo de esto último es el siguiente:
+            @1(5)
+            (#+@1)   ==> deja un resultado en la pila
+            (#-@1)   ==> no toma el elemento de la pila, sino que deja otro.
+            En este caso, Tolin arroja un error de "Expresión mal formada".
+            
+            Además, el analizador sintáctico de Tolin no es "Turing-decidible", por
+            la existencia de registros de memoria, y un par de funciones que no
+            dejan nada en la pila de operaciones. Sin embargo, una expresión sí
+            puede ser "Turing-decidible" si es una expresión bien formada.
+
+   Expresión bien formada
+            Una expresión "bien formada" es aquella que termina con un único
+            resultado en la pila de proceso.
+   
+   Ejemplo de expresión bien formada:
+            if(match{"código\;santiago"},up(tri(#)),"")
+            
+            Si en la línea procesada existen las palabras "código" y "santiago",
+            quitará los espacios en blanco de la línea, y la convertirá en
+            mayúsculas; luego, la dejará en la pila. De lo contrario, dejará un
+            caracter nulo. Tolin detecta si en la pila no hay nada, y no altera
+            la fuente.
+   
+   Ejemplo de expresión no válida:
+            @1(5)
+
+            "5" es guardado en registro 1, pero no deja nada en la pila. 
+            Un resultado válido sería el siguiente:
+            @1(5)
+            @1    ==> esto, aunque parezca absurdo, deja un resultado en la pila.
+
+   Expresiones "{}"
+            Estas expresiones operan sobre la línea procesada ORIGINAL. Esto quiere decir
+            que una expresión como esta:
+               tolin -f ropa-de-dalien 'do  /* ver estructuras de ciclo después */
+                                           tre{"rancio","oloroso"}
+                                        until(at{"rancio"})'
+            Caerá en un loop infinito si encuentra una línea con la palabra "rancio".
+            El ejemplo es redundante, porque DO no es necesario, pero sirve para
+            exponer el punto.
+            Explicación: TRE reempazará "rancio" por "oloroso" en la línea original, y
+            dejará el resultado en la pila de resultados. Pero, AT tomará la línea
+            original, no la pila de resultados, y volverá a encontrar "rancio".
+            ¿Solución? Esta es una posible solución (puede haber más):
+               tolin -f ropa-de-dalien '@1(#)  /* asigna la línea a registro 1 */
+                                        do 
+                                           @1(tre(@1,"pedro","PEDRO")) 
+                                        until(at(@1,"pedro")) 
+                                        @1  /* libera registro 1 */'
+            O mejor aún:
+               tolin -f ropa-de-dalien 'match{"rancio"}?tre{"rancio","oloroso"};'
+            
+            O nivel dios:
+               tolin -f ropa-de-dalien 'tre{"rancio","oloroso"}'
+   
+            
+  NOCIONES DEL LENGUAJE DE MACROS DE TOLIN.
+
+   Operadores aritméticos: 
+   
+   +, -, *, /, \(div. entera), %(resto modulo), ^(potencia).
+   
+   Reglas de operaciones:
+         
+         *) Toda expresión debe ir entre paréntesis. Ejemplo:
+         
+            (($1+10)-1); str(#-0.5*$4); etc.
+   
+   Operadores lógicos:
+   
+   =, <, >, <=, >=, <>|!=, ~ (negación).
+            
+            Devolverán "0" si la condición se cumple; de lo contrario,
+            devolverán "1".
+            Operaciones lógicas y aritméticas deben ir entre paréntesis.
+      
+      "~"   Niega un resultado numérico: si "n" es 0, "~n" es 1, y si
+            "n" es distinto de "0" (puede ser negativo), "~n" es 0. 
+            Util.
+
+   Reglas de comparación:
+
+         *) Toda expresión debe ir entre paréntesis. Ejemplo:
+            or( (I=1),(I=2) )?...:...;
+         
+         *) No es necesario usar "=0" cuando se compara un valor con 0.
+            Ejemplo:
+               ((I%2)=0)?{I," es par"}:{I," es impar"}; 
+            es lo mismo que:
+               (I%2)?{I," es par"}:{I," es impar"}; 
+            dado que "?" espera un "0" como valor verdadero, y un número
+            distinto de "0" como valor falso.
+         
+         *) Si se compara un número con un string, el número será convertido
+            a string.
+              Si v=290.23
+              v="0"  ==>  "290.23"="0"
+              
+         *) Si se compara un string con un número, el string será convertido
+            a número. Cualquier string que no se componga de dígitos, será
+            convertido a 0. Cuidado con esto.   
+              Si v="290.23"
+              v>0  ==> 290.23>0
+              Si v="hola mundo"
+              v>0  ==> 0>0
+              Si v=""
+              v>0  ==> 0>0
+
+   Los siguientes operadores trabajan con números de 32 bits:
+   
+   &                 AND binario. Ejemplo 0x100101b & 25, 0xFFh & 0x00101b.
+   |                 OR BINARIO.
+   !                 XOR BINARIO.
+   >>                Desplazamiento hacia la derecha. Ejemplo: 1>>2.
+   <<                Desplazamiento hacia la izquierda, Ejemplo: 1<<2.                     
+
+   Números negativos:
+   
+            Deben ser escritos entre paréntesis.
+
+   NOTA: todas las funciones y atajos deben ser escritas con
+         minúsculas. Aquí las escribo con mayúscula porque soy
+         choro.
+
+   Comentarios:
+                     Acepta comentarios de bloque /* ... */
+
+
+   Variables globales y sentencias de operación y configuración:
+   
+   (Puede escribirlas con mayúsculas o nimúsculas)
+   
+   I                 Variable que contiene el número de la línea que se
+                     está procesando.
+                     
+   L                 Variable que contiene la longitud de la línea original
+                     que se está procesando. Dicho valor no será alterado
+                     por subsguientes alteraciones de esa línea,salvo por
+                     la función RP().
+                     Ejemplo:
+                        tolin -f bit.c 'say(str(l)+nl)'
+   
+   NT                Número total de tokens de la línea procesada. Su valor
+                     depende de la función DEFT(), descrita más adelante,
+                     de la opción "-ts", o de la función RP().
+   
+   NL                Inserta un caracter de nueva línea en un string.
+                     Ejemplo:
+                       tolin -f foo '"hola"+nl+"mundo"'
+                 ==>   hola
+                       mundo!
+   
+   HT y VT           Inserta un caracter de tabulación horizontal (HT) y de
+                     tabulación vertical (VT).
+                     Ejemplo:
+
+                       tolin -f foo '"hola"+ht+"mundo"'
+                 ==>   hola   mundo 
+                       
+                       tolin -f foo '"hola"+vt+"mundo"'
+                 ==>   hola
+                           mundo
+
+   NEXT              Lee la siguiente línea del archivo procesado. NT es actualizado,
+                     junto con 'I'.
+                     Lo que hace es mover el puntero interno de lectura del archivo,
+                     memorizando la posición de inicio de la línea.
+                     Si NEXT supera el fin de archivo, levanta un flag interno que
+                     avisa que se ha llegado al final de archivo. Dicho flag es leído
+                     por la función EOF. Además, mantiene la última línea leída en
+                     memoria.
+                     
+   BACK              Mueve el puntero de lectura del archivo procesado a la posición
+                     donde inicia la línea recién leída. Se puede usar para incluir
+                     dicha línea en una lectura posterior.
+
+     >>IMPORTANTE>>  BACK no puede usarse para leer la línea anterior, porque ya está
+                     en uso. La idea principal de BACK es que sea la última en ser
+                     ejecutada para cada línea procesada, por si se usa el comando
+                     NEXT dentro del script hasta que la línea leída cumpla con una
+                     condición de término. No sé si me exclipo bien...
+                     Su uso con otro fin podría causar error.
+
+   STOP              Finaliza la lectura del archivo. Si se usa el comando '-M',
+                     la ejecución continuará con el siguiente archivo de la lista, si
+                     existe. 
+
+   CLEAR             Elimina el contenido del BUFFER.
+   
+   
+   Las siguientes sentencias solo se ejecutan una vez.
+   (Use solo con mayúsculas)
+                     
+   VOID              Indica a Tolin que si un resultado es vacío, lo añada a
+                     la pila de resultados. Sin este flag, los resultados
+                     vacíos no son considerados. Esto no tiene nada que ver
+                     con la función COPY vista más adelante.
+                     Ejemplo:
+                       tolin -f foo 'VOID 1-1'
+                 ==>   0
+   
+   RESET             Resetea el BUFFER en cada cambio de archivo. Esto incluye
+                     los valores del espacio de variables del BUFFER (declarados
+                     con '-B'), los que vuelven a su declaración original.
+                     Al final de cada archivo, si existen valores adicionales
+                     a las variables globales en el BUFFER, se guardará dicho
+                     contenido en un archivo cuyo nombre será el nombre del
+                     archivo, más ".buffer".
+
+   BUFF              Incluye el contenido de las variables globales defindas
+                     por la opción '-B' en la salida del programa.
+                     Ejemplo:
+                        tolin -f foo -B '100 30' 'BUFF'
+                 ===>   100 30
+
+                        tolin -f foo -B '100 30' 'BUFF #1(#1+1) #2(#2+#1)'
+                 ==>    101 131
+
+   NOSEN             Define búsquedas case insensitive, es decir, insensible
+                     a mayúsculas y minúsculas. Si busca "Ana", será un match
+                     "ANA", "ana", "aNa", etc.
+                     Por default, toda búsqueda se realiza case-sensitive.
+                     Las siguientes funciones y operadores son influenciados
+                     por este modificador:
+
+                   * operadores "-" y "^" sobrecargados.
+                   * operadores "&" y "|" sobrecargados.
+                   * funciones AT, RAT, AF, y MATCH.
+                     
+                     Esta sentencia no tiene nada que ver con la opción '-si',
+                     que es usada como parámetro interno de búsqueda de líneas.
+                     NOSEN solo opera dentro del script.
+
+   Macros que se sustituyen en análisis sintáctico. Respete mayúsculas y nimúsculas.
+   
+                     _ALPHA_  = ABCDEFGHIJKLMNÑOPQRSTUVWXYZ
+                     _alpha_  = abcdefghijklmnñopqrstuvwxyz
+                     _number_ = 0123456789
+                     PI       = 3.14159265358979323846
+                     
+   Registros de memoria.
+   
+                     Son variables. Existen 20 registros de memoria que
+                     pueden ser usados en una expresión, y creo que es
+                     mucho. 20 es el valor por default: puede cambiarlo
+                     con la opción '-mem <n>'.
+                     Dichas memorias son inicializadas en cada ejecución
+                     del script (por cada línea leída), y pueden contener
+                     valores de distinto tipo en su ciclo de vida.
+
+   MOV(n,valor)      Mueve un valor al registro "n". "n" puede ser un número
+                     constante o una expresión.
+                     Ejemplo:
+                     mov(2,100)
+                     mueve el valor 100 al registro 2
+
+      @n(valor)      Idem. Es más corto y elegante. Ejemplo:
+                     @2(100)
+                     "n" debe ser una constante numérica.
+      
+     @{N}(valor)     Idem a MOV, con la diferencia que "N" puede ser una
+                     expresión que devuelva un índice de registro, así como
+                     una constante numérica.
+                     Ejemplo:
+                       tolin -s "juanito esta feliz de verte" '@1(2) 
+                                                               ${@1}("vive")'
+                     sale:
+                       juanito vive feliz de verte
+
+   VAR(n)            Obtiene un valor de un registro "n". Ejemplo:
+                     var(2)
+                     obtiene el valor guardado en el registro 2.
+
+      @n             Idem. "n" debe ser una constante numérica.
+
+     @{N}            Idem. "N" puede ser una constante numérica, o una expresión.
+                     Ejemplo:
+                       tolin -s "juanito esta feliz de verte" '@1(2) @2(@1-1)
+                                                               @{(@1-1)}("vive") 
+                                                               @{1}+":"+@{@2}'
+                     sale:
+                       vive:vive
+      
+      Importante     Los registros de memoria fueron incluidos para solventar
+                     procesos complejos de edición; sin embargo, pueden ser
+                     mal usados, como por ejemplo, @n(v) no deja ningún 
+                     valor en la pila, y eso está mal. Se resuelve si se
+                     escribe: @n(v) @n.
+                     Los registros son solo temporales, no globales, se
+                     resetean con cada iteración.
+      
+      RECORDAR
+                     Tolin no procesa un grupo de expresiones: procesa una sola
+                     expresión, que puede tener "saltos" (como una función
+                     discontinua reparable), pero no debe indefinirse.
+                     Cuando una expresión se "indefine", es cuando devuelve más
+                     de un resultado, y eso Tolin no lo dejará pasar.
+                     Tolin puede aceptar saltos de línea para ordenar el código
+                     y para ayudar a la comprensión del mismo, pero al final
+                     procesará dicho código como una sola línea.
+
+
+
+   Estructura de Ciclo.
+
+   
+                     DO/UNTIL es una estructura de iteración. Pueden haber
+                     "pozos" anidados, aunque no se me ocurre para qué.
+
+   DO                Entra al "pozo", al ciclo iterativo.
+
+   UNTIL(n)          Vuelve al principio del ciclo, si "n" es distinto de 0.
+                     si "n" es 0, sale. 
+                     Es idéntico a repeat/until de Pascal: iterará hasta que
+                     la condición se cumpla.
+                     Ejemplo:
+                     
+                     Se tiene en archivo:
+                     
+                     mensaje es total
+                     mensaje es total
+                     mensaje es total
+                     
+                     y se añade este valor al BUFFER mediante '-B 0':
+                     
+                     0
+                     
+                     Pruebe el siguiente código:
+                     
+                null                     /* termina en linea en blanco */
+                deft(" ")                /* define un tokenizer local */
+                @1(tri(#))               /* asigno tri(#) a registro 1 */
+                do                     /* entra al pozo */
+                   let(1,(#1+1))         /* incremento de valor línea 1 */ 
+                   @2(tk(@1,#1))         /* dejo token #1 en registro 2 */ 
+                   @3( {{@3,"..."},@2} ) /* operacion generica, dejo en 3 */
+                until(nt-#1)              /* total - token actual != 0 ? */
+                @3                       /* dejo registro 3 en pila */
+                let(1,0)                 /* dejo valor de línea 1 en 0 */
+                     
+                     Muestra:
+                     mensaje...es...total
+                     mensaje...es...total
+                     mensaje...es...total
+                
+                     NOTA: el recurso de la línea 1 como variable global de proceso
+                     estaba antes de la inclusión de los registros de memoria.
+
+
+   Sobrecarga de operadores.
+
+                     Algunos operadores, tanto aritméticos como operadores de bits, 
+                     están sobrecargados con funciones especiales de proceso de cadenas.
+                     Estas son esas funciones:
+
+        Sean S, S1, S2 cadenas, y N un número.
+        
+        S1+S2        Idem a CAT(S1,S2), pero no es CAT.
+
+        S+N, N+S     Iden a PTRP(S,N). Ejemplo:
+                     tolin -s "Este es un ejemplo. No otro" '5+#'
+                 ==> es un ejemplo. No otro
+                     
+                     tolin -f foo -dim 10 '"Sui Generis"+4'
+                     ==> Generis
+
+        S-N, N-S     Idem a PTRM(S,N). Ejemplo:
+                     tolin -f foo -dim 10 '"Sui Generis"-8'
+                     ==> Sui
+                     
+                     #-(len(#)-rat{"//"})
+                     borra los comentarios de línea "//".
+                     
+        S1-S2        Elimina exactamente S2 desde S1. Ejemplo:
+                     "María tenía un corderito"-"tenía"
+                 ==> "María  un corderito"
+                     Funciona como la búsqueda de CTRL-NN de LAICA, con la opción
+                     "full", y reemplazo por nada.
+
+        S*N, N*S     Idem a CP(S,N)
+
+        S1*S2        Mezcla S1 con S2. Ejemplo:
+                     "Hola!"*" " ==> "H o l a ! "
+
+        S1/S2        Filtra desde S1 los caracteres que no son los indicados
+                     en S2. Es complementario a DC(). Ejemplo:
+                     "20.356.019-5" / "0123456789"  ==> "203560195"
+
+        S1/N         Devuelve un substring de S1, desde la posición N en adelante.
+                     Ejemplo:
+                     "Este es un ejemplo. No otro"/at{"."}
+                 ==> ". No otro"
+                     "Este es un ejemplo. No otro"/(at{"."}+2)
+                 ==> "No otro"
+                  
+        N/S1         Devuelve un substring de S1, desde la primera posición hasta
+                     la posición N. Ejemplo:
+                     
+                     tolin -s "Este es un ejemplo. No otro" 'at{"."}/#'
+                 ==> "Este es un ejemplo."
+                 
+                     tolin -s "Este es un ejemplo. No otro" '(at{"."}-1)/#'
+                 ==> "Este es un ejemplo"
+                     
+        S1\N         Ajusta desde S1 dentro de la línea procesada, a la posición
+                     indicada por N. Ejemplo:
+                     
+                     tolin -s "a[i]=100" '"="\10'
+                 ==> a[i]        =100
+
+               <<IMPORTANTE>>
+                     Solo tomará la primera ocurrencia de S1; las demás, serán
+                     descartadas.
+                     
+        S1^S2        Idem a AF(S1,S2) para la primera ocurrencia.
+
+        S1^N         Inserta S1 dentro de la línea procesada, en la posición N.
+                     Ejemplo:
+  
+                       tolin -s "base(100)" '".string"^at{"("}'
+                ==>    base.string(100)
+                     
+        S1%S2        Devuelve "0" si S1 tiene coincidencias con el patrón
+                     indicado en S2. Ejemplo:
+                     "base-20192601.txt"  % "base-????????.*" ==> 0
+                     "base-201926011.txt" % "base-????????.*" ==> 1
+                     "0" indica "éxito".
+                     "1" indica, según el usuario:
+                     -informático de tomo y lomo: fracaso.
+                     -millenial: No te preocupes, es una oportunidad para
+                                 mejorar; no estás mal, solo es este programa,
+                                 perdón, esta tonta aplicación la que no
+                                 te comprende... 
+                     "?" indica que se espera un solo caracter.
+                     "*" indica que se espera una secuencia de caracteres.
+
+        S%N          devuelve el caracter de "S" ubicado en la posición "N".
+                     Ejemplo:
+                       "hola mundo" % 6 ==> "m"
+
+        S1|S2        Devuelve "0" si S1 está contenido como substring en S2;
+                     de lo contrario, devuelve "1".
+                     Ejemplo:
+                     "carbon"|"Kirk es una unidad de carbono" ==> 0
+                     "carbon"|"hola mundo" ==> 1
+        
+        S1&S2        Devuelve "0" si S1 está contenido exactamente como un
+                     substring en S2. De lo contrario, devuelve "1".
+                     Ejemplo:
+                     "carbon"&"Kirk es una unidad de carbono" ==> 1
+                     "unidad"&"Kirk es una unidad de carbono" ==> 0
+                     
+
+   Funciones aritméticas.
+
+  
+   ABS(n), SQRT(n), LOG(n), LN(n), SIN(n), COS(n), TAN(n)
+                     Para qué las explico...Sin embargo, hay que decir que
+                     las funciones trigonométricas aceptan argumentos en
+                     grados. Si desea calcular argumentos en radianes, use
+                     la opción "-rad".
+
+   INT(n)|[n]        Entero "riesgoso". Mejor use ROUND. 
+
+   CEIL(n)           Función techo.
+
+   FLOOR(n)          Función piso.
+
+   ROUND(n,dec)      Redondeo.
+
+   ROUND{dec}        Idem, pero en la línea procesada.
+   
+   RND(n)            Devuelve un número aleatorio entre 0 y 1. "n" es un
+                     factor multiplicador. Si no quiere alterar el número
+                     devuelto, use rnd(1).
+
+   SGN(n)            -1 si n<0; 1 si n>0; 0 si n=0.
+
+   EXP(n)            Exponencial.
+
+   INV(n)            1/n.
+
+
+   Funciones básicas de texto.
+
+   UTF8(V)           Convierte "V" a codificación UTF8. Por defecto, Tolin
+                     realiza la conversión. Sin embargo, cuando lee en modo
+                     binario, es posible que dicha conversión falle.
+                     
+   ANSI(V)           Convierte "V" de UTF8 a ANSI, útil para cuando se leen
+                     archivos en modo binario o con una codificación que
+                     venga de Windows o Mac.
+                     
+        <<IMPORTANTE>> Se aceptan combinaciones entre estas funciones.
+      
+   RP(V)             Reemplaza línea procesada por "V", quedando esta como la
+                     línea oficial de proceso.
+                     Ejemplo 1:
+                        
+                        tolin -s "a[i]=100" 'rp("="\10) tr{"=","= "}'
+                     
+                     sale:
+                        a[i]        = 100
+                        
+                     Ejemplo 2:
+
+                        tolin -f bit.c 'rp("hola mundo") $1+" : "+$2'
+
+                     sale:
+                        ...
+                        hola : mundo
+                        hola : mundo
+                        ...
+                        
+     >>IMPORTANTE>>  Si no hace nada más después de ejecutado este
+                     comando, no habrá resultados.
+                     Una vez hecho el reemplazo, NT es actualizado. Ejemplo:
+
+                     tolin -f bit.c '@1(nt) 
+                                     rp("hola mundo") 
+                                     say({@1," : "+str(NT)})'
+                     
+                     sale:
+                        2 : 2
+                        7 : 2
+                        ...
+                        1 : 2
+                        9 : 2
+
+
+   TRI(V)            Quita los espacios laterales de "V".
+
+   LTRI(V)           Quita solo los espacios a la izquierda de "V".
+
+   RTRI(V)           Quita solo los espacios a la derecha de "V".
+
+   UP(V)             Convierte "V" a mayúsculas.
+
+   LOW(V)            Convierte "V" a minúsculas.
+
+   PC(V,N)           Centra un texto "V" entre "N" caracteres.
+
+      PC{N}          Centra la línea procesada.
+
+   PL(V,N)           Justifica el texto "V" hacia la derecha, entre
+                     "N" caracteres (padea "V" hacia la izquerda).
+
+      PL{N}          Idem, pero usa la línea procesada. 
+
+   PR(V,N)           Justifica el texto "V" hacia la izquierda, entre
+                     "N" caracteres.
+
+      PR{N}          Idem, pero usa la línea procesada.
+
+   CH(N)             Devuelve el caracter ASCII de "N". Si "N" está fuera del
+                     rango, ya sea que fuese un valor negativo o mayor que 254,
+                     se aplicará módulo 255 y devolverá el caracter respectivo.
+                     Ejemplo:
+                     ch(65) ==> "A"
+
+   ASC(S)            Devuelve el valor ASCII de "S".
+                     Ejemplo:
+                     asc("A") ==> 65
+
+   VAL(V)            Convierte "V" a tipo número para calcular. Si "V" es un
+                     string alfanumérico y no-numérico (no contiene dígitos),
+                     VAL producirá un error. Pero, si el string "V" es vacío,
+                     VAL devolverá "0". Si esto ocurre, y no tiene activa la
+                     opción "VOID" en el encabezado, el resultado no será
+                     mostrado.
+
+   STR(V)            Convierte "V" a tipo string. Util para concatenar un
+                     string con un valor numérico. Ejemplo:
+                     "Resultado: "+str(tasa/100)
+
+   CP(V,N)           Repite "V", "N" veces. Ejemplo:
+                     cp("*",10)  ==> "**********"
+      {*N}           Repite la línea procesada, "N" veces.
+
+
+
+   Uso del BUFFER.
+
+   LIN(N)            Devuelve el contenido de la línea del BUFFER
+                     indicada por "N". Si "N" está fuera del rango, se
+                     devolverá un error y el proceso se detendrá.
+
+      #{N}           Idem.
+
+      #N             Idem.
+
+   Diferencia entre #{N} y #N:
+                     #{N} da la posibilidad de meter una expresión entre
+                     las llaves, ejemplo: #{(2+sgn(#10)*sgn(#10))}. En
+                     cambio, #N requiere que "N" sea una constante
+                     numérica.
+                     
+   LET(N,S)          Cambia el contenido de la línea de BUFFER "N", por "S".
+                     El cambio es permanente.
+                     Este comando sirve para emular variables.
+                     Ejemplo:
+                        si se ha habilitado el buffer #1 con '-B 10', entonces:
+                          let(1,(#1+1))
+                        deja "11" en el buffer #1.
+
+     #N(S)           Idem a LET, en una forma más corta y elegante. "N" debe ser una
+                     constante numérica. 
+                     Ejemplo:
+                        si se ha habilitado el buffer #1 con '-B 10', entonces:
+                          #1(#1+1)
+                        deja "11" en el buffer #1.
+
+     #{N}(S)         Idem a LET, salvo que "N" puede ser una expresión que obtenga
+                     el índice de la línea referenciada, así como una constante
+                     numérica.
+                     Ejemplo:
+                        tolin -f foo -B '10 10' 'BUFF 
+                                                 @1(2) 
+                                                 #{@1}(#1*2) 
+                                                 say({"En linea 2 de buffer = ",#{@1}}+nl)'
+                     sale:
+                        En linea 2 de buffer = 20
+                        10     /* estas 2 líneas existen por la opción BUFF */
+                        20     /* sin BUFF, solo se imprime SAY */
+                     
+        Importante   Si habilitó el tag BUFF en el script, podrá tener dos salidas
+                     para un mismo proceso: la salida estándar, y la salida del
+                     buffer.
+                     
+                     
+   COPY(V)           Toma el valor de "V" y lo deja en el BUFFER, bajo las
+                     siguientes condiciones:
+
+                  1) "V" debe contener algo. No copia string vacío.
+
+                  2) "V" debe ser distinto de "0".    
+
+                     Esta función no devuelve nada a la pila.
+                     
+                     copy(@1)
+
+        Importante   Esto sirve cuando quiere extraer líneas del texto procesado.
+                     Estas quedarán en el BUFFER, el cual será guardado en un
+                     archivo anexo al proceso.
+                     El funcionamiento de esta función es independiente de la salida
+                     estándar del programa. Esto quiere decir que puede tener dos
+                     salidas de un mismo proceso, si habilitó la opción BUFF en el
+                     script.
+
+
+   Funciones avanzadas de texto.
+
+
+   CAT(V,W)          Concatena "V" con "W". Ambos, o cualquiera de ellos, pueden
+                     ser números. Ejemplo:
+                       cat("Número = ",(100+10))
+                     resultará:
+                       Número = 110
+                        
+      {V,W}          Idem.
+
+   LEN(V)            Largo de "V".
+
+   SUB(V,M,N)        Obtiene un substring de "V", que comienza en "M",
+                     con "N" caracteres de largo.
+
+      SUB{M,N}       Obtiene un substring de la línea procesada.
+
+  TR(V,S,T)          Reemplaza "S" por "T", en "V". El reemplazo no
+  TRA(V,S,T,O)       discrimina palabras completas de substrings.
+  TRB(V,S,T,O,P)     Ejemplo: si busca "sa", y reemplaza por "xu", el
+                     resultado final es:
+                       "sapo"   ==> "xupo"
+                       "salas"  ==> "xulas"
+                       "pisala" ==> "pixula"
+                     "O" indica desde qué ocurrencia va a reemplazar.
+                     "P" indica cuántas ocurrencias va a reemplazar, desde
+                     el primer reemplazo hecho en la ocurrencia "O".
+                     Ejemplo:
+                       V="maría tenía un corderito, y maría lo quería mucho"
+                       tr(V,"maría","Juanita")
+                    ==> Juanita tenía un corderito, y Juanita lo quería mucho
+                       tra(V,"maría","Juanita",2)
+                    ==> maría tenía un corderito, y Juanita lo quería mucho
+                       
+                       V="ABCDEABCDEABCDEABCDE"
+                       trb(V,"AB","--",3,1)
+                    ==> ABCDEABCDE--CDEABCDE
+
+    TR[A|B]{S,T[,O[,P]]}  Idem, pero usa la línea procesada.
+
+ TRE(V,S,T)          Reemplaza exactamente "S" por "T". Sirve para borrar
+ TREA(V,S,T,O)       palabras si "T" es "".
+ TREB(V,S,T,O,P)     Ejemplo:
+                       V="Juan Juanita Juanito Juan Juancho Juan"
+                       tre(V,"Juan","Pepe")
+                    ==> Pepe Juanita Juanito Pepe Juancho Pepe
+                       trea(V,"Juan","Pepe",2)
+                    ==> Juan Juanita Juanito Pepe Juancho Pepe
+                       treb(V,"Juan","Pepe",2,1)
+                    ==> Juan Juanita Juanito Pepe Juancho Juan
+
+   TRE[A|B]{S,T[,O[,P]]}  Idem, pero usa la línea procesada.
+
+   TPC(V,C,N)        Reemplaza el caracter de la posición "N" de "V", por
+                     el caracter indicado en "C".
+                     Ejemplo:
+                     
+                     tolin -f foo 'tpc("maría es cool","I",4)'
+                 ==> marIa es cool
+                 
+     TPC{C,N}        Idem, pero usa la línea procesada.
+
+   RPC(V,S,T)        Reemplaza en "V", todos los caracteres indicados por
+                     "S", por lo caracteres indicados por "T".
+                     Ejemplo:
+                     
+                     Si V="Av. acacia #666"
+                     rpc(V,".#1234567890","$@ABCDEFGHIJ")
+                 ==> "Av$ acacia @GGG"
+
+      RPC{S,T}       Idem, pero usa la línea procesada.
+
+   INS(V,S,P)        Inserta "S" en la posición "P" de "V". Si "P" es 0,
+                     devuelve la línea de "V" sin tocar.
+                     Ejemplo:
+                     
+                     tolin -f foo ' @1(gloss("90810002.3"))  /* asigna la glosa */
+                                    /* inserta "pesos " antes de "con", y asigna
+                                       a @1 (memoria 1) */
+                                    @1(ins(@1,"pesos, ",(at(@1,"con")-1))+" centavos") 
+                                    @1   /* libera el string */  '
+                     salida:
+                     noventa millones ochocientos diez mil dos pesos, con tres centavos
+
+      INS{S,P}       Idem. Más corto y usa la línea procesada.
+
+   DC(V,S)           Elimina los caracteres en "V" indicados por "S".
+                     Por ejemplo:
+                     Si V="hola.. .mundo!$!"
+                     dc{".$"}  ==> "hola mundo!!"
+                     Puede usar caracteres no imprimibles, concatenando
+                     "CH(n)" al string. 
+
+      DC{S}          Idem, pero en la línea procesada.
+      
+      >>NOTAS>>      Esta función puede usar macros que contienen las letras del alfabeto
+                     en mayúsculas y minúsculas, así como los números. Estas macros son:
+                     _ALPHA_  = ABCDEFGHIJKLMNÑOPQRSTUVWXYZ
+                     _alpha_  = abcdefghijklmnñopqrstuvwxyz
+                     _number_ = 0123456789
+                     
+                     Ejemplo:
+                       tolin -s 'Hola mundo!' 'dc{_alpha_}'         ==> H !
+                       tolin -s 'Hola mundo!' 'dc{_alpha_+_ALPHA_}' ==>  !
+
+   ONE(V,S)          Reduce secuencias de caracteres iguales, a uno solo.
+                     El caracter es indicado por "S".
+                     Ejemplo:
+                     Si V="2.00023     0.0289   1.29607  "
+                     one(V," ") ==> "2.00023 0.0289 1.29607"
+
+      ONE{S}         Idem, pero con la línea procesada.
+
+   AT(V,S)           Devuelve la posición donde inicia "S", en "V",
+   ATA(V,S,O)        contando de izquierda a derecha.
+                     La opción "O" indica la ocurrencia que considerará.
+                     Ejemplo:
+                       V="ABCDABCDABCDABCD"
+                       at(V,"AB")    ==> 1
+                       ata(V,"AB",3)  ==> 9  ¿dónde está la 3ra ocurrencia?
+                       ata(V,"AB",10) ==> 0 
+                     Si "O" supera el límite de ocurrencias posibles de
+                     la línea, devuelve 0.
+
+      AT[A]{S[,O]}   Idem, pero en la línea del BUFFER.
+
+   AF(V,S)           Tal como AT(), pero busca exactamente "S".
+   AFA(V,S,O)        La búsqueda se realiza de derecha a izquierda.
+                     Ejemplo:
+                       V="ABCD AB CD AB CD ABCD"
+                       af(V,"AB")    ==> 6
+                       afa(V,"AB",2)  ==> 12
+                       afa(V,"AB",10) ==> 0
+                     Si "O" supera el límite de ocurrencias posibles de
+                     la línea, devuelve 0.
+
+      AF[A]{S[,O]}   Idem, pero usando el BUFFER.
+
+   RAT(V,S)          Devuelve la posición donde inicia "S", en "V",
+                     contando de derecha a izquierda.
+
+      RAT{S}         Idem, pero en la línea del BUFFER. 
+
+   RANGE(V,C,D)      Busca en "V" los caracteres que están en el rango
+                     entre "C" y "D". "C" y "D" son números ASCII. Si
+                     encuentra alguno de ellos, devuelve su posición.
+                     Si no encuentra nada, devuelve "0".
+                     Si se usa dentro de DO/UNTIL, RANGE buscará más
+                     caracteres omitiendo el último hallazgo.
+                     Una aplicación de esta función se puede ver como
+                     un comando de CTRL-NN (e.g: "R 100, 120").
+                     Ejemplo:
+                        range(#,1,8)
+                     busca en "#" algún caracter ubicado entre ASCII 1
+                     y ASCII 8, y devuelve su posición.
+     
+     RANGE{C,D}      Idem, pero usa la línea procesada.
+
+   PTRP(V,N)         Avanza el inicio del string "V", "N" caracteres.
+                     Ejemplo:
+                         V="Postula"
+                         ptrp(V,4) ==> "tula"
+
+      {+N}           Idem, pero usa la línea procesada.
+                     Ejemplo:
+                         #="Postula"
+                         {+4} ==> "tula"
+
+   PTRM(V,N)         Retrocede el final del string "V", "N" caracteres.
+
+      {-N}           Idem, pero usa la línea procesada.
+
+
+
+   Tokens.
+
+   DEFT(S)           Define localmente un nuevo tokenizer.
+      
+   TK(V,N)           Obtiene el token "N" de "V". "N" comienza en 1.
+                     Si "N" es 0, devuelve la línea completa.
+                     Un token se devuelve sin espacios laterales.
+                     Un índice de token negativo da error.
+                     Si no existe el token "N", devolverá vacío.
+       >>PROBLEMA>>
+                     Si realiza cálculos con tokens, por ejemplo,
+                     "#1+$2*3", si $2 es vacío, el cálculo se reseteará,
+                     debido a la sobrecarga de operadores. Para asegurarse
+                     de que siempre sean números, use VAL:
+                     "#1+val($2)*3". De esta forma, si $2 es vacío, VAL($2)
+                     será "0".
+
+      ${N}           Obtiene el token "N" de la línea procesada.
+
+      $N             Obtiene el token "N" de la línea procesada.
+
+   Diferencia entre ${N} y $N:
+                     ${N} da la posibilidad de meter una expresión entre
+                     las llaves, ejemplo: ${2+sgn(#10)}. En cambio, $N
+                     requiere que "N" sea una constante numérica, tal y
+                     como se usa en AWK.
+                     Ejemplos:
+                       tolin -c 'ls -l' '$9'
+                       tolin -c 'ls -l' '${nt}'
+                       tolin -c 'ls -l' 'tk(#,9)'
+                       tolin -c 'ls -l' 'tk(#,nt)'
+                     despliega el nombre de los archivos listados.
+
+   TKLET(V,N,M)      Cambia el token indicado por "N", por el token
+                     indicado por "M", de "V".
+                     Si "M" es un tipo string, cambia el token "N" por el
+                     string. 
+                     Este comando devuelve la línea en proceso con el token
+                     modificado.
+
+           $N(V)     Cambia el token "N" por "V". Solo trabaja sobre la línea
+                     de proceso; para cambiar una línea procesada previamente,
+                     use TKLET.
+                     "N" debe ser una constante numérica.
+                     Ejemplo:
+                       tolin -c 'ls -l' 'tklet($9(up($9)),8,"00:00")'
+                     devuelve la línea con el token 8 y 9 modificados:
+                     ...
+                     -rw-r--r-- 1 xu xu 1181 feb 9 00:00 UPPER.C
+                     ... 
+          
+          ${N}(V)    Idem a TKLET pero sobre la línea procesada. 
+                     "N" puede ser una expresión que devuelva el índice del
+                     token, así como una constante numérica.
+                     Ejemplo:
+                       tolin -s "juanito esta feliz de verte" '@1(2) 
+                                                               ${@1}("vive")'
+                     sale:
+                       juanito vive feliz de verte
+
+      TKLET{N,M}     Idem, pero usa la línea procesada.
+                     Ejemplo:
+                       tolin -c 'ls -l' 'tklet{9,up($9)}'
+                       tolin -c 'ls -l' 'tklet(#,9,up($9))'
+                     ambos convierten los nombres de archivos en mayúsculas:
+                     ...
+                     -rw-r--r-- 1 xu xu 1181 feb 9 13:06 UPPER.C
+                     ...
+
+
+   Funciones utilitarias.
+
+   SAY(S)            Despliega por pantalla el contenido de "S".
+                     Por default, Tolin despliega por pantalla el resultado de
+                     una función, pero solo cuando esta coincide con el fin de
+                     la ejecución del script, igual que AWK. Si quiere desplegar
+                     algo entremedio, use SAY.
+                     Ejemplo:
+                     Aquí no tiene sentido usar SAY:
+                       tolin -f file '{I," : "+#}'
+                     Pero aquí sí:
+                       tolin -f file 'say({"Original:",#+nl}) {"NUEVA:",up(#)}'
+
+   EOF               Lee el flag levantado por NEXT. Si ha llegado al final del
+                     archivo, devuelve "0"; de lo contrario, devuelve "1".
+                     Ejemplo:
+                       tolin -f bit.c -ss "\}" 'next {"EOF = ",eof}'
+                     sale:
+                       EOF = 1
+                       ...
+                       EOF = 1
+                       EOF = 0
+                     
+                     Esta función es ideal para usarla con DO/UNTIL.
+                       tolin -f file 'do ... next until(eof)'
+   
+   ENV(V)            Devuelve el contenido de la variable de entorno indicada
+                     en "V".
+                     Ejemplo:
+                       tolin -f foo 'env("PATH")'     
+                     
+   GLOSS(N)          Convierte un número en palabras. Si "N" es un string,
+                     acepta un número de 69 dígitos (mil decillones).
+                     Si "N" es un número "numérico", el máximo aceptado
+                     oscila en una potencia de 10 elevado a 19 (trillones).
+                     Acepta como máximo 2 decimales, y si hay más, trunca.
+                     Ejemplo:
+                       tolin -f foo 'gloss(2001)'
+                   ==> dos mil uno
+
+                       tolin -f foo 'gloss(1023890201.189)'
+                   ==> mil veintitres millones ochocientos noventa mil 
+                       docientos uno con dieciocho
+                       
+                       tolin -f foo 'gloss(9.9E19)'
+                   ==> noventa y nueve trillones.
+                   
+                       tolin -f foo 'gloss(9.9E20)'
+                   ==> ** no se puede convertir [****************] **
+                       
+                       tolin -f foo 'gloss("99983000290029127433929838400144.21")'
+                   ==> noventa y nueve quintillones novecientos ochenta y tres mil
+                       cuatrillones docientos noventa mil veintinueve trillones ciento 
+                       veintisiete mil cuatrocientos treinta y tres billones novecientos 
+                       veintinueve mil ochocientos treinta y ocho millones cuatrocientos
+                       mil ciento cuarenta y cuatro con veintiuno
+                   
+   MON(V,S,M,N)      Da formato moneda al número en "V", con un signo 
+                     monetario "S", un ancho "M", y "N" decimales. El
+                     primer caracter de "S" es un relleno.
+                     Ejemplo:
+                         mon("12345.3567",".US$",17,2)
+                     ==> US$.....12,345.36
+
+      MON{S,M,N}     Idem, pero usa la línea procesada.
+
+   MSK(V,S)          Da formato a "V", siguiendo un patrón "S". El
+                     primer caracter de "S" es un relleno.
+                     Ejemplo:
+                         msk("123456768"," ##.###.###-#")
+                     ==> 12.345.676-8
+
+      MSK{S}         Idem, pero usa la línea procesada.
+
+   SAT(V,S)          Crea, a partir de "V", un string formateado por "S".
+                     Sirve para dar formato a archivos de datos como 
+                     archivos largo-posición, por ejemplo.
+                     
+                     Un campo está formado por el signo "$", un número que
+                     indica posición de token (que inicia en 0), y, 
+                     opcionalmente, el ancho en caracteres seguido por la 
+                     justificación del texto (C,L,R), separado de "$n" por ":".
+                     Puede ser usado un campo simplemente indicando "$n", sin
+                     otro tipo de formateo.
+                     La función de XU "SATURA()", en el menú "CTRL-OP", sección
+                     "STANDARD" de LAICA, posee información más detallada sobre el 
+                     formato de "S".
+             Ejemplo:
+
+                     si #=Juanito Pérez,5.334.234-K,Av. El Desguesadero S/N,
+                          Pedro Aguirre Cerda,300.000
+
+                     sat(#,"$0:30L$1:15L$2:25L$3:20L$4:10R")
+
+            devuelve el siguiente registro "largo-posición":
+
+                   Juanito Pérez                 5.334.234-K    Av. El Desguesadero S/N                      Pedro Aguirre Cerda    300.000
+
+            Lo mismo hace:
+
+                   sat{"$0:30L$1:15L$2:25L$3:20L$4:10R"}
+
+                     Nuevamente, use "sat{}" si no piensa usar "#" como argumento
+                     de otra función. Si hace esto último, debe usar la forma "SAT()".
+
+      SAT{S}         Idem, pero usa la línea procesada. Otro ejemplo:
+                     
+                     tolin -s "juan,acasia 227,lo prado" -ts "," 'sat{("comuna"+ht+ht+":$2"+nl
+                                                                  +"nombre"+ht+ht+":$0"+nl+
+                                                                  "dirección"+ht+":$1")}'
+                     devuelve el siguiente registro formateado:
+                       comuna           :lo prado
+                       nombre           :juan
+                       dirección        :acasia 227
+
+   MATCH(V,S)        Devuelve "0" si todos los tokens de "S" están en "V";
+                     de lo contrario, devuelve un número negativo.
+                     "S" debe separar sus tokens con "\;". Ejemplo:
+                     Si V="Mensaje a analizar por tokens"
+                     match(V,"analizar\;tokens") ==> 0
+                     match(V,"analiza\;tokens")  ==> -1
+                     match(V,"analiza\;token")   ==> -2
+                     Esta función es ideal para trabajar con IF() y con el
+                     BUFFER. Por ejemplo, en la siguiente línea, si el match
+                     es "0", devuelve la primera línea del BUFFER; de lo
+                     contrario, devuelve la segunda línea del BUFFER:
+                     
+                     if ( match{"string1\;string2"}, #1, #2 )
+                     
+      MATCH{S}       Idem, pero usa la línea procesada.
+   
+   EXPR-A-EVALUAR ? <EXPR1> [ : <EXPR2> ] ;|.
+                     Potente herramienta de bifurcación. 
+                     Evalúa "EXPR-A-EVALUAR":
+                     
+                     1) Si es 0 o vacío, ejecuta <EXPR1>.
+                     2) (Opcional) De lo contrario, ejecuta <EXPR2>.
+                     
+                     El terminador ";"|"." es OBLIGATORIO, pues indica donde
+                     finaliza "?". Si no lo coloca, podría haber un error.
+                     Ejemplo:
+                       tolin -c 'ls -l' 'match{"tolin"}?#.'
+                     despliega:
+                       -rwxr-xr-x 1 xu xu  1840368 may 20 22:52 tolin
+                       -rw-r--r-- 1 xu xu   111194 may 11 14:27 tolin.bak
+                       -rw-r--r-- 1 xu xu    51216 may 21 01:09 tolin.help
+                       -rw-r--r-- 1 xu xu   154893 may 21 00:54 tolin.prg
+                     
+                     Mismo ejemplo, pero despliega el tamaño en KB:
+                       tolin -c 'ls -l' 'match{"tolin"}? $5( {pl(($5/1024),8)," KB"} );'
+                     despliega:
+                       -rwxr-xr-x 1 xu xu  1797.23 KB may 21 01:16 tolin
+                       -rw-r--r-- 1 xu xu   108.59 KB may 11 14:27 tolin.bak
+                       -rw-r--r-- 1 xu xu    50.68 KB may 21 01:14 tolin.help
+                       -rw-r--r-- 1 xu xu   151.41 KB may 21 01:16 tolin.prg
+
+          <<IMPORTANTE>>
+                     Puede anidar este comando.
+                     Puede usar "?" sin ":", pero no olvide el terminador ";"|".".
+                     Puede usar AND(), OR(), XOR() y "~" (negación), explicados
+                     más adelante.
+                     Puede usar más de una expresión en <EXPR1> y <EXPR2>, siempre
+                     y cuando estas no dejen más de un resultado en la pila
+                     al finalizar su macro.
+
+         >>COMENTARIOS>>
+                     Si usa ":" sin "?", saltará todo lo que venga después,
+                     dado que buscará ";" o ".".
+      
+   IF(F,S,T)         Si "F" es vacío o 0, devuelve "S", de lo contrario,
+                     devuelve "T".
+
+         <<IMPORTANTE>>
+                     IF (y sus variantes) necesita que "S" y "T" generen
+                     resultados que puedan ser guardados en la pila de
+                     proceso.
+                     Tanto "S" como "T" son ejecutados, pero uno de esos
+                     resultados será el ganador; el otro se desechará.
+                     Así que trate de que no haya error en ambos. Si no
+                     necesita un "ELSE", use "".
+
+                     "IF" devuelve un tipo string; por tanto, si trabaja con
+                     números, debe usar "VAL()". Ejemplo:
+                        val( if( ($1%2), $2, $3))*100
+                     Si el primer token es par, usa el token 2; sino, usa el
+                     token 3.
+                     Si desea comprobar cosas como si la expresión es negativa
+                     o positiva (distinta de 0), puede usar cosas como esta:
+
+                        if( sgn($1)+1, ..., ...)  Comprueba por negativo
+                        if( sgn($1)-1, ..., ...)  Comprueba por positivo
+                        if( sgn($1)+1, ..., if( sgn($1), ... ,...)  )
+                                                  Comprueba si es menor o igual
+                                                  a 0. Etc.
+
+                     El problema con el último ejemplo, es que tendrá que 
+                     repetir la operación tanto para "menor" como para "igual"
+                     a 0. Salvo que use las siguientes funciones, que solo
+                     trabajan con expresiones que devuelven números:
+
+    IFLE(F,S,T)      Comprueba si "F" es menor o igual a cero. 
+
+    IFGE(F,S,T)      Comprueba si "F" es mayor o igual a cero.
+            
+            NOTA     Si desea hacer algo cuando "F" sea menor que cero, solo use
+                     la parte "falso" de IFGE(); idem cuando desee hacer algo
+                     para "F" mayor que cero (IFLE()). Idem cuando desee hacer 
+                     algo con "F" distinto de cero, usando el falso de IF().
+
+    DIFERENCIAS ENTRE IFxx Y "?"
+                     Mientras IFxx deja un resultado en la pila en función de su
+                     evaluación, "?" no devuelve nada, sino que son las expresiones
+                     en su interior las que devuelven resultados.
+                     Tenga presente esta diferencia. No obstante, ambas expresiones
+                     pueden ser compatibles con un objetivo, como por ejemplo:
+                     
+                        @1(if(match{"CODIGO"},1,0))   /* bien: IF dejará "1" en @1 si
+                                                         encuentra "CODIGO", sino,
+                                                         dejará "0" */
+                     
+                     hará lo mismo que "?":
+                     
+                        @1(match{"CODIGO"}?1:0;)    /* bien: "1" será dejado en la pila
+                                                       si encunetra "CODIGO", sino,
+                                                       "0" será usado. */
+                     
+                     La diferencia es que IFxx toma de la pila el resultado de la expresión,
+                     el valor "1" y el valor "0"; en cambio, "?" solo toma el resultado de
+                     la expresión, y salta a la dirección del dato o instrucción en función
+                     de dicho resultado.
+
+    AND, OR y XOR    Se puede simular AND sumando el resultado de las operaciones
+                     de IFxx. Ejemplo:
+                     
+                        if( ( match{"word"} + (sgn($1)-1) ),...,...)
+                     
+                     si "match" encuentra una palabra, es "0", y si el primer
+                     token es positivo, el resultado es "0": AND.
+                     OR se puede simular con una multiplicación. 
+                     
+                        if( ( match{"word"} * (sgn($1)-1) ),...,...)
+                     
+                     Si uno de los resultados es "0", hará todo cero y se obtendrá
+                     la opción para "verdad"; lo mismo sucede si todos los resultados
+                     son "0". De lo contrario, si ninguno es "0", se obtendrá la
+                     opción para "falso".
+                     XOR es algo más rebuscado. Se puede simular así, con la 
+                     ayuda de registros de memoria para hacer el trabajo una
+                     sola vez:
+
+                        @1(sgn(match{"word"})*(-1))
+                        @2(sgn($1)-1)
+                        if ( ( (@1+(1-@2)) * ((1-@1)+@2) ), ..., ...)
+
+    AND(), OR(), XOR()
+                     Si todo lo anterior le parece tedioso, existen las funciones
+                     aludidas que hacen el mismo trabajo. Estas devuelven "0" si
+                     sus argumentos son "0", o "1" si alguno de ellos no cumple con
+                     la condición esperada. Solo aceptan dos argumentos. Ejemplo:
+                     
+                        if( and(match{"word"}, (sgn($1)-1)), ..., ...)
+                        if( or(match{"word"},  (sgn($1)-1)), ..., ...)
+                        if( xor(match{"word"}, (sgn($1)-1)), ..., ...)
+                     
+                     Se permite anidar dichas funciones? Obvio.        
+
+
+   Operadores de bits.
+
+   
+   Números de base diferente al decimal.
+                     Tolin convertirá cualquier número de base hexadecimal, octal y
+                     binaria, a decimal, y lo hará por defecto en el análisis
+                     sintáctico. Igual se incluye un convertidor a decimal, por si
+                     desea convertir una cadena formada dentro de la expresión.
+                     Los números de base diferente son, y se deben escribir, así:
+   
+   Forma BINARIA     Prefijo: "0x", dígitos "0" y "1", y sufijo "b". Ejemplo:
+                     0x10100101b 
+                     
+   forma HEXADECIMAL Prefijo: "0x", dígitos 0-9, caracteres mayúsculas A,B,C,D,E,F,
+                     y sufijo "h". Ejemplo:
+                     0xA0389FFh
+   
+   Forma OCTAL       Prefijo "0x", dígitos 0-7, y sufijo "o". Ejemplo:
+                     0x7165o.
+   
+   Funciones de bits y cambio de base:
+
+         >>NOTA>>    El conteo de bits de un número binario comienza en cero, y se
+                     cuenta de derecha a izquierda:
+                     
+                        bits :  7 6 5 4 3 2 1 0
+                                1 1 0 0 1 0 1 1 = 203 dec.
+                     
+                     Así, el bit 0 es 1, el bit 1 es 1, el bit 2 es 0, etc.
+                     Esto puede variar de una máquina a otra, por lo que sería
+                     conveniente tenerlo en cuenta a la hora de migrar su script.
+   
+   BIT(N,P)          Devuelve el bit de "N" ubicado en la posición "P".
+                     Ejemplo:
+                       tolin -f foo '{("Bit 2 de 132("+bin(132)+") = "),bit(132,2)}'
+                       ==> Bit 2 de 132(0x10000100b) = 1
+
+   ON(N,P)           Enciende el bit "P" de "N" (lo deja en "1").
+                     Ejemplo:
+                       tolin -f foo 'bin(on(0,1))'
+                       ==> 0x10b
+
+   OFF(N,P)          Apaga el bit "P" de "N" (lo deja en "0").
+                     Ejemplo:
+                       tolin -f foo 'bin(off(0x11111111b,0))'
+                       ==> 0x11111110b
+                       
+                       tolin -f foo 'bin(off(0x11111111b,1))'
+                       ==> 0x11111101b
+
+   NOT(N)            Negación binaria de "N" (complemento a 1).
+
+   BIN(N)            Devuelve la versión binaria de N.
+
+   HEX(N)            Devuelve la versión hexadecimal de N.
+
+   OCT(N)            Devuelve la versión octal de N.
+
+   DEC(S)            Devuelve la versión decimal numérica de la cadena S.
+                     Ejemplo:
+                        dec("0xFFh")+1 ==> 256.00
+                     Si intenta convertir una expresión constante sin comillas, habrá
+                     error, lo mimso si intenta usar DEC con un número decimal.
+   
+   Para realizar el cálculo de complemento a 2, simplemente escriba:
+   num-binario ! 0x11111...(n-bits)b + 1
+   También puede usar números hexadecimales, si desea.
+ 
+
+ EJEMPLO DE EXPRESION "Tolin":
+   Las siguientes expresiones extraen un string separado con comillas,
+   en cualquier ubicación.
+   La primera expresión está escrita con atajos, y la segunda, con sus
+   funciones equivalentes:
+   
+   sub{ (at{"\""}+1), (rat{"\""} - at{"\""}-1 )  }
+
+   sub(#,(at(#,ch(34))+1), (rat(#,ch(34))-at(#, ch(34))-1))
+   
+   (Es mucho más compacto escribir lo de arriba que lo de abajo, aunque esté
+    escrito en proto-sumerio)
+   
+   Si # = var<-getenv("SHELL")
+   La expresión devuelve: SHELL  (sin comillas)
+   
+ IMPORTANTE
+   Cualquier expresión aritmética usada como argumento de función, debe estar
+   escrita entre paréntesis. Por ejemplo:
+   
+   tolin -s "25,7" -ts "," '{ (# +" = "+ str($1 \ $2)), {" Resto: ", ($1 % $2) } }'   
+   
+   salida:
+   
+   25,7 = 4 Resto: 4.00
+   
+   La división entera y el resto módulo de los tokens 1 y 2, deben estar entre
+   paréntesis.
+
+ UN EJEMPLO PARA BIOINFORMATICOS.
+   Suponga que tiene una base de datos con códigos PEP de eukaryotes asociados a su
+   cadena de ADN, y desea extraer las indicadas en un archivo llamado "busca.txt".
+   Este archivo contiene códigos de la forma:
+
+     hsa:102723502
+     pgr:PGTG_17079
+     pps:100981131
+     pgr:PGTG_17081
+     pps:100992675
+     pps:100991307
+     hsa:102723502
+
+   (puede contener otro tipo de códigos. Eso es decisión del programador)
+
+   El script que hace esto es el siguiente:
+   
+   tolin -f eukaryotes.pep -fw busca.txt '@1(#+nl)  /* puede usar say(#+nl) 
+                                          next 
+                                          do 
+                                             @1(@1+#)  /* puede ser say(#+nl) */
+                                             next 
+                                          until(or( (at{">"}>0), eof )) 
+                                          back 
+                                          @1 /* si usa SAY, esto no tiene sentido aquí */'
+   
+   devolverá el siguiente resultado:
+     ...
+     pps:100991307  RGAG4; retrotransposon gag domain containing 4                                                           
+     MSEASGNLNSLRMANVALREELNALRGENANLGLQLGRALAEVNSLRGNVSSYIR...VLFRLTPRQGGHRAARGRIRV 
+     ...
+     pgr:PGTG_17079  hypothetical protein
+     MLFSIQTKAASALGLAMAVASAPLNERTKLNLFERGVGLGWLCHYDGIAAPSVDI...LDLVLGICLDLVGCQNQGLTN
+     (etc.)
+   
+   Explicación. '-fw' proporciona los códigos a buscar en el archivo 'eukaryotes.pep'.
+   Dicha búsqueda se hace con la herramienta GREP de Linux, potente herramienta de
+   búsqueda. Luego, se indexan los resultados, y se salta directamente a las posiciones
+   correspondientes a los match encontrados. Ahí funciona el script: tomará la primera
+   línea (con el código), añadirá un salto de línea, y leerá la siguiente (NEXT);
+   luego, entrará a un "pozo" iterativo que concatenará la línea leída a la ya existente,
+   leerá la siguiente, y terminará cuando encuentre en la línea leída un ">", o haya
+   llegado al final del archivo.
+   Luego, para continuar con la búsqueda, se devuelve una línea atrás (para no saltar
+   la línea con ">"), y se libera el resultado.
+   
+   Semejante resultado obtendrá con el siguiente script, solo que añadirá un salto de
+   linea después de cada línea leída:
+   
+     tolin -f eukaryotes.pep -fs busca.pep 'do
+                                               say(#+nl)
+                                               next
+                                            until(or((at{">"}>0),eof))
+                                            back'
+   
+   COMENTARIOS. 
+   
+   Este script tardará lo que tarda GREP en completar la búsqueda. El resto del proceso
+   es instantáneo.  
+
+ OTRO EJEMPLO.
+   Suponga que desea dejar en blanco aquellas líneas que no cumplen una condición:
+   
+   VOID  /* acepte la línea vacía como resultado valido */
+   #*(1-(match{"word"}*(-1)))
+   
+   o bien, para irse más a la segura:
+   
+   VOID
+   #*(1 - (sgn(match{"word"})) * (-1))
+   
+   Dejará solo las líneas que tienen "word", y las demás las dejará en blanco.
+
+ Y OTRO EJEMPLO.
+   Suponga que edita un archivo de cadenas de ADN, y desea encontrar, en una misma
+   línea, dos subcadenas, pero que no contenga una tercera subcadena:
+   
+   @1(match{"ATGCTT"})
+   @2(match{"ATAATC"})
+   @3(match{"ATTTAA"})
+   copy( if( and(and(@1,@2),(@3+1) ),I,0 ))
+   
+   Dejará en el BUFFER el número de línea de la línea que cumple con la condición.
+   El valor "0" no será dejado en el BUFFER, por definición de COPY.
+
+   Explicación: Si el match es realizado, devolverá "0". Así, si encuentra las cadenas
+   en @1 y @2, AND de más adentro devolverá "0". Luego, si encuentra un match para @3,
+   devolverá 0, pero no nos sirve, luego, se le suma 1, como una especie de negación.
+   NOT() es un negador binario, no de valores de "verdad", y no se puede usar.
+   El primer AND evaluará todo, y el IF devolverá el número de línea actual si todo se
+   cumple; de lo contrario, devuelve "0". Ahora, COPY solo guardará en el BUFFER un
+   valor que sea distinto de vacío, o distinto de 0, como ya se mencionó.
+
+ Y EL ULTIMO EJEMPLO.
+   Usted desea copiar al BUFFER las líneas que contengan, al menos, una comilla.
+
+   copy( sgn(at{"\""})*# )
+   
+   Copiará las líneas al BUFFER que contengan comillas. Si no encuentra comillas, 
+   AT() devuelve "0", SGN() devuelve 0, y 0*STRING es nada. Ahora, si encuentra,
+   AT() devolverá un número mayor que cero, SGN() devolvera "1", y 1*STRING es
+   el mismo STRING. Recordar que un string multiplicado por un número "N", produce una
+   réplica del mismo, "N" veces.
+
+  AUTOR.
+           Don Dalien, mayo de 2019. daniel.stuardo@gmail.com
+           Bugs, consultas, al mail.
+
