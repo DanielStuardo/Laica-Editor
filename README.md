@@ -29,10 +29,13 @@ Terminal text editor written in xBase/ANSI C for Linux platform Debian and deriv
  con ellas podrá usar LAICA editor:
 
  Librería ncurses.......... $ sudo apt-get install libncurses-dev
+ 
  Librería client-side X11.. $ sudo apt-get install libx11-dev
+ 
  Soporte de mouse para
  consola................... $ sudo apt-get install libgpm-dev 
-                     o bien:
+ 
+ o bien:
                             $ sudo apt-get install libgpmg1-dev
  
  Una vez que tenga todo lo anterior instalado, descargue el archivo
